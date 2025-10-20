@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Quantum Ripple Canvas by Grok</title>
+    <style>
+        body, html { margin: 0; padding: 0; overflow: hidden; background: #000; }
+        canvas { display: block; width: 100vw; height: 100vh; }
+        #ui { position: fixed; top: 10px; left: 10px; z-index: 10; color: white; font-family: Arial; background: rgba(0,0,0,0.5); padding: 10px; border-radius: 5px; }
+        #seed { width: 100px; margin-right: 5px; }
+        button { margin-right: 5px; padding: 5px 10px; }
+    </style>
+</head>
+<body>
+    <div id="ui">
+        <input type="text" id="seed" placeholder="Seed" />
+        <button onclick="exportImage()">Export PNG</button>
+        <button onclick="shareSeed()">Share Seed</button>
+    </div>
+    <canvas id="canvas"></canvas>
+    <script>
+        const canvas = document.getElementById('canvas');
+        const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+        if (!gl) { document.body.innerHTML = '<h1>WebGL not supported—try Chrome!</h1>'; }
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const seedInput = document.getElementById('seed');
+
+        function resize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            if (gl) gl.viewport(0, 0, canvas.width, canvas.height);
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        const vsSource = `attribute vec2 a_position; uniform vec2 u_resolution; void main() { vec2 zeroToOne = a_position / u_resolution; vec2 zeroToTwo = zeroToOne * 2.0; vec2 clipSpace = zeroToTwo - 1.0; gl_PointSize = 3.0; gl_Position = vec4(clipSpace * vec2(1, -1), 0, 1); }`;
+        const fsSource = `precision mediump float; uniform vec3 u_color; void main() { gl_FragColor = vec4(u_color, 1.0); }`;
+
+        function createShader(type, source) {
+            const shader = gl.createShader(type);
+            gl.shaderSource(shader, source);
+            gl.compileShader(shader);
+            if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) { console.error(gl.getShaderInfoLog(shader)); return null; }
+            return shader;
+        }
+        const vertexShader = createShader(gl.VERTEX_SHADER, vsSource);
+        const fragmentShader = createShader(gl.FRAGMENT_SHADER, fsSource);
+        const program = gl.createProgram();
+        gl.attachShader(program, vertexShader);
+        gl.attachShader(program, fragmentShader);
+        gl.linkProgram(program);
+        gl.useProgram(program);
+
+        const positionBuffer = gl.createBuffer();
+        const a_position = gl.getAttribLocation(program, 'a_position');
+        const u_resolution = gl.getUniformLocation(program, 'u_resolution');
+        const u_color = gl.getUniformLocation(program, 'u_color');
+
+        const particles = [];
+        const numParticles = 800; // Reduced for smoother mobile perf
+        let seed = localStorage.getItem('quantum_seed') || Math.random().toString(36).slice(2, 10);
+        seedInput.value = seed;
+
+        function xorshift(state) {
+            state ^= (state << 13); state ^= (state >> 17); state ^= (state << 5); return state >>> 0;
+        }
+
+        function initParticles() {
+            let state = parseInt(seed, 36) || 0;
+            particles.length = 0;
+            for (let i = 0; i < numParticles; i++) {
+                state = xorshift(state);
+                const x = (state % 10000) / 10000 * canvas.width;
+                state = xorshift(state);
+                const y = (state % 10000) / 10000 * canvas.height;
+                particles.push({ x, y, vx: 0, vy: 0, hue: (state % 360) / 360 });
+            }
+        }
+        initParticles();
+
+        let oscillator = null;
+        function updateAudio(motion) {
+            if (ctx.state === 'suspended') ctx.resume();
+            if (!oscillator) {
+                oscillator = ctx.createOscillator();
+                const gainNode = ctx.createGain();
+                oscillator.connect(gainNode);
+                gainNode.connect(ctx.destination);
+                gainNode.gain.setValueAtTime(0.05, ctx.currentTime); // Softer volume
+                oscillator.type = 'sine';
+                oscillator.start();
+            }
+            const freq = 150 + Math.abs(motion.x + motion.y) * 200;
+            oscillator.frequency.setValueAtTime(freq, ctx.currentTime);
+        }
+
+        let motion = { x: 0, y: 0 };
+        if (window.DeviceOrientationEvent) {
+            window.addEventListener('deviceorientation', (e) => {
+                motion.x = (e.beta || 0) / 90;
+                motion.y = (e.gamma || 0) / 90;
+                updateAudio(motion);
+            });
+        }
+
+        let touchPoint = null;
+        canvas.addEventListener('touchstart', (e) => { e.preventDefault(); touchPoint = { x: e.touches[0].clientX, y: e.touches[0].clientY }; });
+        canvas.addEventListener('touchmove', (e) => { e.preventDefault(); touchPoint = { x: e.touches[0].clientX, y: e.touches[0].clientY }; });
+        canvas.addEventListener('touchend', () => { touchPoint = null; });
+
+        function animate() {
+            if (!gl) return requestAnimationFrame(animate);
+            gl.clearColor(0, 0, 0, 1);
+            gl.clear(gl.COLOR_BUFFER_BIT);
+            gl.uniform2f(u_resolution, canvas.width, canvas.height);
+
+            for (let i = 0; i < particles.length; i++) {
+                const p = particles[i];
+                p.vx += motion.x * 0.05;
+                p.vy += motion.y * 0.05;
+                if (touchPoint) {
+                    const dx = touchPoint.x - p.x;
+                    const dy = touchPoint.y - p.y;
+                    const dist = Math.hypot(dx, dy);
+                    if (dist < 100 && dist > 0) {
+                        p.vx -= dx / dist * 0.3;
+                        p.vy -= dy / dist * 0.3;
+                    }
+                }
+                // Simplified neighbor force for perf
+                if (i % 10 === 0) { // Sample every 10th particle
+                    for (let j = i + 1; j < particles.length && j < i + 20; j++) { // Limit checks
+                        const p2 = particles[j];
+                        const dx = p2.x - p.x;
+                        const dy = p2.y - p.y;
+                        const dist = Math.hypot(dx, dy);
+                        if (dist < 40 && dist > 0) {
+                            const force = (40 - dist) / 40 * 0.01;
+                            p.vx += dx / dist * force;
+                            p.vy += dy / dist * force;
+                        }
+                    }
+                }
+                p.x += p.vx; p.y += p.vy;
+                if (p.x < 0 || p.x > canvas.width) p.vx *= -0.8;
+                if (p.y < 0 || p.y > canvas.height) p.vy *= -0.8;
+                p.x = Math.max(0, Math.min(canvas.width, p.x));
+                p.y = Math.max(0, Math.min(canvas.height, p.y));
+                p.vx *= 0.99; p.vy *= 0.99;
+            }
+
+            const positions = new Float32Array(particles.length * 2);
+            particles.forEach((p, i) => { positions[i * 2] = p.x; positions[i * 2 + 1] = p.y; });
+            gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+            gl.bufferData(gl.ARRAY_BUFFER, positions, gl.STREAM_DRAW);
+            gl.enableVertexAttribArray(a_position);
+            gl.vertexAttribPointer(a_position, 2, gl.FLOAT, false, 0, 0);
+
+            gl.enable(gl.BLEND);
+            gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+            particles.forEach((p, i) => {
+                const hue = p.hue + Date.now() * 0.0001; // Subtle color shift over time
+                const r = (Math.sin(hue * 6.28) * 0.5 + 0.5);
+                const g = (Math.sin((hue + 0.33) * 6.28) * 0.5 + 0.5);
+                const b = (Math.sin((hue + 0.66) * 6.28) * 0.5 + 0.5);
+                gl.uniform3f(u_color, r, g, b);
+                gl.drawArrays(gl.POINTS, i, 1);
+            });
+            gl.disable(gl.BLEND);
+
+            requestAnimationFrame(animate);
+        }
+        if (gl) animate();
+
+        function exportImage() {
+            canvas.toBlob((blob) => {
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(blob);
+                link.download = `quantum_ripple_${seed}.png`;
+                link.click();
+            }, 'image/png');
+        }
+
+        function shareSeed() {
+            seed = seedInput.value || Math.random().toString(36).slice(2, 10);
+            localStorage.setItem('quantum_seed', seed);
+            initParticles();
+            resize(); // Refresh positions
+            if (navigator.share) {
+                navigator.share({ title: 'Quantum Ripple Art', text: `My unique seed: ${seed} – Tilt & touch to create!`, url: location.href });
+            } else {
+                prompt('Copy this seed to share:', seed);
+            }
+        }
+    </script>
+</body>
+</html>
