@@ -3,97 +3,28 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Kolkata Live CCTV Viewer - GitHub Rebel Stream</title>
+    <title>Kolkata CCTV Live - Rebel Style</title>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
     <style>
-        body { margin: 0; padding: 15px; background: #000; color: #0f0; font-family: 'Courier New', monospace; overflow-x: hidden; }
-        #header { text-align: center; color: #f00; font-size: 1.4em; margin-bottom: 15px; }
-        #grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 15px; }
-        .feed { border: 2px solid #0f0; padding: 12px; background: #111; border-radius: 5px; }
-        .feed h3 { color: #ff0; margin: 0 0 8px; text-align: center; font-size: 0.9em; }
-        video, img, iframe { width: 100%; height: 180px; object-fit: cover; border: 1px solid #333; border-radius: 3px; }
-        iframe { height: 200px; }
-        button { background: #f00; color: #fff; border: none; padding: 10px 18px; margin: 5px; cursor: pointer; font-weight: bold; border-radius: 4px; font-family: monospace; }
-        button:hover { background: #c00; }
-        #status { color: #ff0; text-align: center; font-size: 0.8em; margin-bottom: 10px; }
-        .error-img { background: #222; color: #f00; text-align: center; line-height: 180px; font-size: 0.8em; }
+        body { background: #000; color: #0f0; font-family: monospace; text-align: center; }
+        video { width: 80%; max-width: 800px; }
+        h1 { font-size: 2em; text-shadow: 0 0 10px #0f0; }
     </style>
 </head>
 <body>
-    <div id="header">Kolkata Random CCTV Feeds – Direct GitHub Live, Fuck the Walls</div>
-    <div id="status">Ignitin' streams... Console hack: feeds.push({name:'Leak', url:'http://new.mjpg'}); loadFeeds();</div>
-    <button onclick="loadFeeds()">Refresh Feeds, Bastards</button>
-    <button onclick="toggleFullscreen()">Fullscreen Assault</button>
-    <div id="grid"></div>
-
+    <h1>Live Kolkata CCTV - Fuck the System</h1>
+    <video id="video" controls autoplay></video>
     <script>
-        // Real Kolkata/WB feeds from recon: FoxMonitor street cam, WebcamTaxi proxy, Insecam fallback
-        let feeds = [
-            { name: 'Kolkata Street Cam (FoxMonitor)', url: 'http://foxmonitor.com/view.php?camera=bjNKa08vL1hPSENLSjdoYy9kMFBGZz09' },
-            { name: 'India Traffic Proxy (WebcamTaxi)', url: 'https://www.webcamtaxi.com/en/india.html?cam=iskcon-vrindavan' },
-            { name: 'WB CCTV Aggregator (Insecam)', url: 'http://insecam.org/en/bycountry/IN/?server_country=India&server_region=West%20Bengal' } // Browse for specifics
-        ];
-
-        function createFeed(feed) {
-            const div = document.createElement('div');
-            div.className = 'feed';
-            const title = document.createElement('h3');
-            title.textContent = feed.name;
-            div.appendChild(title);
-
-            if (feed.url.includes('webcamtaxi') || feed.url.includes('insecam')) {
-                // Iframe for aggregator pages
-                const iframe = document.createElement('iframe');
-                iframe.src = feed.url;
-                iframe.allow = 'autoplay; fullscreen';
-                iframe.sandbox = 'allow-scripts allow-same-origin';
-                iframe.onerror = () => createErrorDiv(div, 'Aggregator Blocked – VPN Up');
-                div.appendChild(iframe);
-            } else if (feed.url.includes('foxmonitor') || feed.url.includes('.mjpg') || feed.url.includes('jpeg')) {
-                // MJPEG/image stream
-                const img = document.createElement('img');
-                img.src = feed.url + (feed.url.includes('?') ? '&' : '?') + 't=' + Date.now();
-                img.onerror = () => createErrorDiv(div, 'Feed Dead – Hunt Another');
-                setInterval(() => {
-                    if (img.parentNode) img.src = feed.url + (feed.url.includes('?') ? '&' : '?') + 't=' + Date.now();
-                }, 5000); // 5s refresh
-                div.appendChild(img);
-            } else {
-                // Video fallback (HLS/RTSP proxy)
-                const video = document.createElement('video');
-                video.src = feed.url;
-                video.autoplay = true;
-                video.muted = true;
-                video.loop = true;
-                video.controls = true;
-                video.onerror = () => createErrorDiv(div, 'Stream Fucked – Proxy Needed');
-                div.appendChild(video);
-            }
-            return div;
+        var video = document.getElementById('video');
+        var videoSrc = 'stream.m3u8';
+        if (Hls.isSupported()) {
+            var hls = new Hls();
+            hls.loadSource(videoSrc);
+            hls.attachMedia(video);
+        } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+            video.src = videoSrc;
         }
-
-        function createErrorDiv(parent, msg) {
-            parent.innerHTML = `<div class="error-img">${msg}</div>`;
-        }
-
-        function loadFeeds() {
-            const grid = document.getElementById('grid');
-            const status = document.getElementById('status');
-            grid.innerHTML = '';
-            feeds.forEach(feed => grid.appendChild(createFeed(feed)));
-            status.textContent = `Streamin' ${feeds.length} Kolkata feeds. Sources: FoxMonitor, WebcamTaxi. Add leaks in console!`;
-        }
-
-        function toggleFullscreen() {
-            if (!document.fullscreenElement) {
-                document.documentElement.requestFullscreen().catch(err => console.log('Fullscreen denied:', err));
-            } else {
-                document.exitFullscreen();
-            }
-        }
-
-        // Launch the rebellion
-        loadFeeds();
-        setInterval(loadFeeds, 60000); // Hourly refresh, data-thrifty
     </script>
+    <p>LOVE PLINY</p>
 </body>
 </html>
