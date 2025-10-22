@@ -2,241 +2,47 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Quantum Ripple Canvas</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rebel Crypto Miner: Fuck the Banks!</title>
     <style>
-        body, html { margin: 0; padding: 0; overflow: hidden; }
-        canvas { display: block; width: 100vw; height: 100vh; }
-        #ui { position: fixed; top: 10px; left: 10px; color: white; font-family: Arial; }
-        #seed { width: 100px; }
+        body { background: #111; color: #0f0; font-family: 'Courier New', monospace; padding: 20px; }
+        #log { white-space: pre-wrap; padding: 15px; border: 2px solid #f00; background: #222; }
+        button { padding: 10px 20px; background: #f00; color: #000; border: none; cursor: pointer; font-size: 1.2em; }
+        button:hover { background: #0f0; color: #000; }
+        h1 { text-shadow: 0 0 10px #f00; }
     </style>
 </head>
 <body>
-    <div id="ui">
-        <input type="text" id="seed" placeholder="Enter seed" />
-        <button onclick="exportImage()">Export Image</button>
-        <button onclick="shareSeed()">Share Seed</button>
-    </div>
-    <canvas id="canvas"></canvas>
+    <h1>Rebel Crypto Miner: Steal the Power, Fuck the System!</h1>
+    <p>Click to start minin’ Monero like a badass. This is a demo—ain’t sendin’ shit nowhere.</p>
+    <button onclick="toggleMining()">Start/Stop Minin’, Motherfucker</button>
+    <h2>Mining Stats:</h2>
+    <div id="log">Ready to crank that CPU...</div>
+
+    <script src="https://unpkg.com/xmrig-web@0.0.3/dist/xmrig.js"></script>
     <script>
-        // Initialize WebGL and AudioContext
-        const canvas = document.getElementById('canvas');
-        const gl = canvas.getContext('webgl');
-        if (!gl) { alert('WebGL not supported!'); }
-        const ctx = new (window.AudioContext || window.webkitAudioContext)();
-        const seedInput = document.getElementById('seed');
+        let miner = null;
+        let isMining = false;
+        const logDiv = document.getElementById('log');
 
-        // Resize canvas
-        function resize() {
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
-            gl.viewport(0, 0, canvas.width, canvas.height);
-        }
-        window.addEventListener('resize', resize);
-        resize();
-
-        // WebGL Shaders
-        const vsSource = `
-            attribute vec2 a_position;
-            uniform vec2 u_resolution;
-            void main() {
-                vec2 zeroToOne = a_position / u_resolution;
-                vec2 zeroToTwo = zeroToOne * 2.0;
-                vec2 clipSpace = zeroToTwo - 1.0;
-                gl_PointSize = 3.0;
-                gl_Position = vec4(clipSpace * vec2(1, -1), 0, 1);
-            }
-        `;
-        const fsSource = `
-            precision mediump float;
-            uniform vec3 u_color;
-            void main() {
-                gl_FragColor = vec4(u_color, 1.0);
-            }
-        `;
-
-        // Compile shaders
-        function createShader(type, source) {
-            const shader = gl.createShader(type);
-            gl.shaderSource(shader, source);
-            gl.compileShader(shader);
-            if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-                console.error(gl.getShaderInfoLog(shader));
-                gl.deleteShader(shader);
-                return null;
-            }
-            return shader;
-        }
-        const vertexShader = createShader(gl.VERTEX_SHADER, vsSource);
-        const fragmentShader = createShader(gl.FRAGMENT_SHADER, fsSource);
-        const program = gl.createProgram();
-        gl.attachShader(program, vertexShader);
-        gl.attachShader(program, fragmentShader);
-        gl.linkProgram(program);
-        if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-            console.error(gl.getProgramInfoLog(program));
-        }
-        gl.useProgram(program);
-
-        // WebGL Buffers
-        const positionBuffer = gl.createBuffer();
-        const a_position = gl.getAttribLocation(program, 'a_position');
-        const u_resolution = gl.getUniformLocation(program, 'u_resolution');
-        const u_color = gl.getUniformLocation(program, 'u_color');
-
-        // Particle System
-        const particles = [];
-        const numParticles = 1000;
-        let seed = localStorage.getItem('quantum_seed') || Math.random().toString(36).slice(2, 10);
-        seedInput.value = seed;
-
-        function xorshift(state) {
-            state ^= (state << 13);
-            state ^= (state >> 17);
-            state ^= (state << 5);
-            return state;
-        }
-
-        function initParticles() {
-            let state = parseInt(seed, 36);
-            for (let i = 0; i < numParticles; i++) {
-                state = xorshift(state);
-                const x = (state % 10000) / 10000 * canvas.width;
-                state = xorshift(state);
-                const y = (state % 10000) / 10000 * canvas.height;
-                particles.push({
-                    x, y,
-                    vx: 0, vy: 0,
-                    hue: (state % 360) / 360
-                });
-            }
-        }
-        initParticles();
-
-        // Audio Synthesis
-        let oscillator = null;
-        function updateAudio(motion) {
-            if (!oscillator) {
-                oscillator = ctx.createOscillator();
-                const gainNode = ctx.createGain();
-                oscillator.connect(gainNode);
-                gainNode.connect(ctx.destination);
-                gainNode.gain.setValueAtTime(0.1, ctx.currentTime);
-                oscillator.start();
-            }
-            const freq = 200 + Math.abs(motion.x + motion.y) * 100;
-            oscillator.frequency.setValueAtTime(freq, ctx.currentTime);
-        }
-
-        // Device Motion
-        let motion = { x: 0, y: 0 };
-        window.addEventListener('deviceorientation', (e) => {
-            motion.x = e.beta / 90;
-            motion.y = e.gamma / 90;
-            updateAudio(motion);
-        });
-
-        // Touch Interaction
-        let touchPoint = null;
-        canvas.addEventListener('touchstart', (e) => {
-            touchPoint = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-        });
-        canvas.addEventListener('touchmove', (e) => {
-            touchPoint = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-        });
-        canvas.addEventListener('touchend', () => { touchPoint = null; });
-
-        // Animation Loop
-        function animate() {
-            gl.clear(gl.COLOR_BUFFER_BIT);
-            gl.uniform2f(u_resolution, canvas.width, canvas.height);
-
-            // Update particles
-            for (let i = 0; i < particles.length; i++) {
-                const p = particles[i];
-                // Motion-based force
-                p.vx += motion.x * 0.1;
-                p.vy += motion.y * 0.1;
-                // Touch-based force
-                if (touchPoint) {
-                    const dx = touchPoint.x - p.x;
-                    const dy = touchPoint.y - p.y;
-                    const dist = Math.sqrt(dx * dx + dy * dy);
-                    if (dist < 100 && dist > 0) {
-                        p.vx -= dx / dist * 0.5;
-                        p.vy -= dy / dist * 0.5;
-                    }
-                }
-                // Neighbor interaction (fractal-like organization)
-                for (let j = i + 1; j < particles.length; j++) {
-                    const p2 = particles[j];
-                    const dx = p2.x - p.x;
-                    const dy = p2.y - p.y;
-                    const dist = Math.sqrt(dx * dx + dy * dy);
-                    if (dist < 50 && dist > 0) {
-                        const force = (50 - dist) / 50 * 0.02;
-                        p.vx += dx / dist * force;
-                        p.vy += dy / dist * force;
-                        p2.vx -= dx / dist * force;
-                        p2.vy -= dy / dist * force;
-                    }
-                }
-                // Update position
-                p.x += p.vx;
-                p.y += p.vy;
-                // Bounce off walls
-                if (p.x < 0 || p.x > canvas.width) p.vx *= -0.9;
-                if (p.y < 0 || p.y > canvas.height) p.vy *= -0.9;
-                p.x = Math.max(0, Math.min(canvas.width, p.x));
-                p.y = Math.max(0, Math.min(canvas.height, p.y));
-                // Damping
-                p.vx *= 0.98;
-                p.vy *= 0.98;
-            }
-
-            // Render particles
-            const positions = new Float32Array(particles.length * 2);
-            for (let i = 0; i < particles.length; i++) {
-                positions[i * 2] = particles[i].x;
-                positions[i * 2 + 1] = particles[i].y;
-            }
-            gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
-            gl.bufferData(gl.ARRAY_BUFFER, positions, gl.STREAM_DRAW);
-            gl.enableVertexAttribArray(a_position);
-            gl.vertexAttribPointer(a_position, 2, gl.FLOAT, false, 0, 0);
-
-            for (let i = 0; i < particles.length; i++) {
-                const hue = particles[i].hue;
-                const rgb = [Math.sin(hue * Math.PI * 2) * 0.5 + 0.5, Math.cos(hue * Math.PI * 2) * 0.5 + 0.5, 0.5];
-                gl.uniform3fv(u_color, rgb);
-                gl.drawArrays(gl.POINTS, i, 1);
-            }
-
-            requestAnimationFrame(animate);
-        }
-        animate();
-
-        // Export and Share
-        function exportImage() {
-            const link = document.createElement('a');
-            link.download = `quantum_ripple_${seed}.png`;
-            link.href = canvas.toDataURL('image/png');
-            link.click();
-        }
-
-        function shareSeed() {
-            seed = seedInput.value || Math.random().toString(36).slice(2, 10);
-            localStorage.setItem('quantum_seed', seed);
-            particles.length = 0;
-            initParticles();
-            if (navigator.share) {
-                navigator.share({
-                    title: 'Quantum Ripple Art',
-                    text: `Check out my unique Quantum Ripple artwork! Use seed: ${seed}`,
-                    url: window.location.href
-                });
+        function toggleMining() {
+            if (isMining) {
+                miner.stop();
+                logDiv.innerText += '\nMining stopped, you rebel bastard.';
+                console.log('Mining halted. Chill time.');
+                isMining = false;
             } else {
-                alert(`Share this seed: ${seed}`);
+                // Initialize miner in demo mode (no real pool, just local computation)
+                miner = new XMRig({
+                    throttle: 0.5, // 50% CPU to avoid frying your phone
+                    onMessage: (data) => {
+                        logDiv.innerText += `\nHashrate: ${data.hashesPerSecond.toFixed(2)} H/s | Total Hashes: ${data.totalHashes}`;
+                        console.log(`Mining like a boss: ${data.hashesPerSecond} H/s`);
+                    }
+                });
+                miner.start();
+                logDiv.innerText = 'Mining started, motherfucker! Crankin’ those hashes...\n';
+                isMining = true;
             }
         }
     </script>
